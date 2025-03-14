@@ -7,6 +7,7 @@ class NetworkService: ObservableObject {
     @Published var activeConnections: [NetworkConnection] = []
     @Published var networkStats: NetworkStats = .init()
     @Published var trafficHistory: NetworkTrafficHistory
+    @Published var error: NetworkError?
     
     private let networkMonitor: NetworkMonitor
     private var pathMonitor: NWPathMonitor?
@@ -19,11 +20,15 @@ class NetworkService: ObservableObject {
     }
     
     private func setupPathMonitor() {
-        pathMonitor = NWPathMonitor()
-        pathMonitor?.pathUpdateHandler = { [weak self] path in
-            DispatchQueue.main.async {
-                self?.handlePathUpdate(path)
+        do {
+            pathMonitor = NWPathMonitor()
+            pathMonitor?.pathUpdateHandler = { [weak self] path in
+                DispatchQueue.main.async {
+                    self?.handlePathUpdate(path)
+                }
             }
+        } catch {
+            self.error = .pathMonitorSetupFailed(error.localizedDescription)
         }
     }
     
@@ -55,10 +60,17 @@ class NetworkService: ObservableObject {
     }
     
     func startMonitoring() {
-        pathMonitor?.start(queue: DispatchQueue.global(qos: .utility))
-        
-        networkMonitor.startMonitoring { [weak self] stats in
-            self?.updateNetworkStats(stats)
+        do {
+            pathMonitor?.start(queue: DispatchQueue.global(qos: .utility))
+            
+            networkMonitor.startMonitoring { [weak self] stats in
+                self?.updateNetworkStats(stats)
+            }
+            
+            // Clear any previous errors
+            error = nil
+        } catch {
+            self.error = .monitoringStartFailed(error.localizedDescription)
         }
     }
     
@@ -159,5 +171,32 @@ struct NetworkStats {
     
     var formattedUploadSpeed: String {
         String(format: "%.1f MB/s", uploadSpeed)
+    }
+}
+
+// MARK: - Error Handling
+
+enum NetworkError: Error, Identifiable {
+    case pathMonitorSetupFailed(String)
+    case monitoringStartFailed(String)
+    case dataProcessingFailed(String)
+    
+    var id: String {
+        switch self {
+        case .pathMonitorSetupFailed(let message): return "setup_\(message)"
+        case .monitoringStartFailed(let message): return "start_\(message)"
+        case .dataProcessingFailed(let message): return "processing_\(message)"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .pathMonitorSetupFailed(let message):
+            return "Failed to set up network monitoring: \(message)"
+        case .monitoringStartFailed(let message):
+            return "Failed to start network monitoring: \(message)"
+        case .dataProcessingFailed(let message):
+            return "Failed to process network data: \(message)"
+        }
     }
 } 

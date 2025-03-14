@@ -29,6 +29,10 @@ class NetworkMonitor {
     private var lastUpdateTime: Date = Date()
     private var securityThreats: [SecurityThreat] = []
     
+    // Store timers to prevent memory leaks
+    private var statsTimer: Timer?
+    private var performanceTimer: Timer?
+    
     func startMonitoring(updateHandler: @escaping StatsUpdateHandler) {
         self.updateHandler = updateHandler
         setupPathMonitor()
@@ -38,8 +42,15 @@ class NetworkMonitor {
     
     func stopMonitoring() {
         pathMonitor?.cancel()
+        pathMonitor = nil
         connections.forEach { $0.cancel() }
         connections.removeAll()
+        
+        // Invalidate timers to prevent memory leaks
+        statsTimer?.invalidate()
+        statsTimer = nil
+        performanceTimer?.invalidate()
+        performanceTimer = nil
     }
     
     private func setupPathMonitor() {
@@ -58,20 +69,26 @@ class NetworkMonitor {
     }
     
     private func startConnectionMonitoring() {
+        // Invalidate existing timer if any
+        statsTimer?.invalidate()
+        
         // In a real implementation, we would:
         // 1. Use Network.framework to monitor active connections
         // 2. Track data transfer for each connection
         // 3. Analyze traffic patterns
         
         // For now, we'll simulate some basic monitoring
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        statsTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.updateNetworkStats()
         }
     }
     
     private func startPerformanceMonitoring() {
+        // Invalidate existing timer if any
+        performanceTimer?.invalidate()
+        
         // Monitor network performance metrics
-        Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        performanceTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             self?.checkPerformance()
         }
     }
@@ -134,4 +151,13 @@ struct NetworkStats {
     var activeConnectionsCount: Int
     var totalBytesReceived: UInt64
     var totalBytesSent: UInt64
+    var activeInterfaces: [NetworkInterface] = []
+    
+    var formattedDownloadSpeed: String {
+        String(format: "%.1f MB/s", downloadSpeed)
+    }
+    
+    var formattedUploadSpeed: String {
+        String(format: "%.1f MB/s", uploadSpeed)
+    }
 } 

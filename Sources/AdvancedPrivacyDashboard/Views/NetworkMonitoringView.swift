@@ -4,11 +4,17 @@ struct NetworkMonitoringView: View {
     @StateObject private var networkService = NetworkService()
     @State private var selectedTimeRange: TimeRange = .hour
     @State private var securityThreats: [NetworkMonitor.SecurityThreat] = []
+    @State private var threatUpdateTimer: Timer?
     
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 headerSection
+                
+                // Error Banner
+                if let error = networkService.error {
+                    errorBanner(error: error)
+                }
                 
                 HStack {
                     networkStatsSection
@@ -42,13 +48,22 @@ struct NetworkMonitoringView: View {
         }
         .onAppear {
             networkService.startMonitoring()
+            updateSecurityThreats()
+            
+            threatUpdateTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+                updateSecurityThreats()
+            }
         }
         .onDisappear {
             networkService.stopMonitoring()
+            
+            threatUpdateTimer?.invalidate()
+            threatUpdateTimer = nil
         }
-        .onChange(of: networkService) { _ in
-            securityThreats = networkService.checkForSecurityThreats()
-        }
+    }
+    
+    private func updateSecurityThreats() {
+        securityThreats = networkService.checkForSecurityThreats()
     }
     
     private var headerSection: some View {
@@ -153,6 +168,33 @@ struct NetworkMonitoringView: View {
             .listStyle(PlainListStyle())
             .frame(height: 200)
         }
+    }
+    
+    private func errorBanner(error: NetworkError) -> some View {
+        HStack {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.yellow)
+            
+            Text(error.description)
+                .foregroundColor(.white)
+            
+            Spacer()
+            
+            Button(action: {
+                // Retry network monitoring
+                networkService.stopMonitoring()
+                networkService.startMonitoring()
+            }) {
+                Text("Retry")
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.2))
+                    .cornerRadius(4)
+            }
+        }
+        .padding()
+        .background(Color.red)
+        .cornerRadius(8)
     }
 }
 
